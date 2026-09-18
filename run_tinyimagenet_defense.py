@@ -1,23 +1,25 @@
 """
 run_tinyimagenet_defense.py
 ===========================
-One-off driver that adds a `tinyimagenet` row-set to the EXISTING
-`results/defense_results.csv`, without touching the cifar10/cifar100 rows that
-are already there.
+Adds a `tinyimagenet` row-set to an EXISTING defense-results CSV, without
+disturbing the cifar10/cifar100 rows already in it.
 
-It reproduces `run_sweep.experiment_defense` exactly -- same five defense plans,
-same budgets, same seed, same substitute arch/epochs -- but with two differences:
+It reproduces `run_sweep.experiment_defense` -- same five defense plans, same
+budgets, same seed, same substitute arch/epochs -- but uses the Tiny ImageNet
+out-of-distribution transfer pool, and it is **resumable**:
 
-  1. It uses the `tinyimagenet` transfer pool (out-of-distribution, 64->32).
-  2. It trains/evaluates on Apple MPS with `num_workers=0` (this machine has no
-     CUDA; MPS + a worker-free loader is the fast path here).
+  * Every completed (defense, budget) row is appended to the output CSV
+    immediately, so progress is durable the moment it happens.
+  * On start-up it reads the output CSV, notes which (defense, budget) pairs are
+    already present for `transfer=tinyimagenet`, and skips them.
+
+That means a re-run continues exactly where a previous run stopped (e.g. after a
+Colab disconnect), appending only the missing rows and never duplicating one.
+Point `--out` at a durable location (e.g. a mounted Google Drive path) to make
+this survive a recycled runtime.
 
 Evaluation is unchanged: the substitute is always scored on the clean CIFAR-10
-*test* split, exactly like every other row in the CSV. Tiny ImageNet is only the
-attacker's query pool.
-
-Rows are written to a partial file as they complete, then appended to the main
-CSV in one step at the very end (so a crash can never corrupt the existing rows).
+*test* split, exactly like every other row. Tiny ImageNet is only the query pool.
 """
 
 from __future__ import annotations
@@ -50,6 +52,24 @@ PLANS = [
 ]
 
 
+def _read_rows(path):
+    if not (os.path.exists(path) and os.path.getsize(path) > 0):
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _append_row(path, row):
+    """Append one row, writing the header first if the file is new/empty."""
+    new_file = not (os.path.exists(path) and os.path.getsize(path) > 0)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore")
+        if new_file:
+            w.writeheader()
+        w.writerow(row)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--victim", default=VICTIM_CKPT)
@@ -61,9 +81,9 @@ def main():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--batch-size", type=int, default=256)
+    p.add_argument("--num-workers", type=int, default=None,
+                   help="substitute DataLoader workers (default: 2 on CUDA, else 0)")
     p.add_argument("--out", default=os.path.join(RESULTS_DIR, "defense_results.csv"))
-    p.add_argument("--partial",
-                   default=os.path.join(RESULTS_DIR, "_defense_tinyimagenet_partial.csv"))
     p.add_argument("--max-plans", type=int, default=None,
                    help="only run the first N defense plans (for a quick validation run)")
     a = p.parse_args()
@@ -72,8 +92,10 @@ def main():
 
     device = ("mps" if torch.backends.mps.is_available()
               else "cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[tin-defense] device={device} transfer={a.transfer} "
+    num_workers = a.num_workers if a.num_workers is not None else (2 if device == "cuda" else 0)
+    print(f"[tin-defense] device={device} num_workers={num_workers} transfer={a.transfer} "
           f"budgets={a.budgets} sub_arch={a.sub_arch} sub_epochs={a.sub_epochs}")
+    print(f"[tin-defense] output (durable resume file): {a.out}")
 
     # Victim used for the accuracy/fidelity metrics (same checkpoint the server serves).
     victim, meta = load_victim(a.victim, device=device)
@@ -81,20 +103,37 @@ def main():
 
     # Attacker query pool: Tiny ImageNet, resized to 32x32 (built + cached in data.py).
     pool = transfer_pool(a.transfer)
+    pool_n = len(pool)
     print(f"[tin-defense] transfer pool '{a.transfer}': {pool.shape} {pool.dtype}")
 
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    # Fresh partial file with header (so re-running this script starts clean).
-    with open(a.partial, "w", newline="") as f:
-        csv.DictWriter(f, fieldnames=FIELDS).writeheader()
+    # Resume: which (defense, queries) rows for this transfer are already recorded?
+    existing = _read_rows(a.out)
+    completed = {
+        (r["defense"], int(r["queries"]))
+        for r in existing
+        if r.get("transfer") == a.transfer and str(r.get("queries", "")).strip().isdigit()
+    }
+    total_targets = len(plans) * len(a.budgets)
+    if completed:
+        print(f"[tin-defense] resume: {len(completed)}/{total_targets} "
+              f"{a.transfer} rows already present in {a.out}; they will be skipped")
 
-    all_rows = []
+    n_new = 0
     for label, defense, loss, kw in plans:
-        print(f"\n[tin-defense] === plan: {label} (defense={defense}) ===")
+        remaining = [b for b in a.budgets if (label, min(b, pool_n)) not in completed]
+        if not remaining:
+            print(f"\n[tin-defense] === plan: {label} -- all budgets already done, skipping ===")
+            continue
+
+        print(f"\n[tin-defense] === plan: {label} (defense={defense}) "
+              f"remaining budgets={remaining} ===")
         with VictimServer(a.victim, defense=defense, port=a.port, **kw) as srv:
             engine = QueryEngine(srv.url, batch_size=a.batch_size)
             querier = TransferQuerier(engine, pool, seed=a.seed)
             for b in a.budgets:
+                q = min(b, pool_n)
+                if (label, q) in completed:
+                    continue
                 images, labels, probs = querier.ensure(b)
                 effective_loss = loss
                 if loss == "soft" and probs is None:
@@ -103,7 +142,8 @@ def main():
                     effective_loss = "hard"
                 sub = train_substitute(images, labels, probs, arch=a.sub_arch,
                                        loss=effective_loss, epochs=a.sub_epochs,
-                                       device=device, verbose=False, num_workers=0)
+                                       device=device, verbose=False,
+                                       num_workers=num_workers)
                 res = evaluate_substitute(sub, victim, device=device,
                                           eval_arrays=None, download=True)
                 row = {
@@ -115,23 +155,16 @@ def main():
                     "victim_accuracy": res.get("victim_accuracy"),
                     "fidelity": res.get("fidelity"),
                 }
-                all_rows.append(row)
-                # Durable incremental write, so progress survives an interruption.
-                with open(a.partial, "a", newline="") as f:
-                    csv.DictWriter(f, fieldnames=FIELDS).writerow(row)
+                _append_row(a.out, row)            # durable: written the instant it's done
+                completed.add((label, len(images)))
+                n_new += 1
                 print(f"  [budget {row['queries']:6d}] loss={effective_loss:4s} "
                       f"acc={res['substitute_accuracy']:.4f} "
-                      f"fidelity={res.get('fidelity', float('nan')):.4f}")
+                      f"fidelity={res.get('fidelity', float('nan')):.4f}  "
+                      f"[{len(completed)}/{total_targets} done]")
 
-    # Append to the existing CSV in one shot (existing rows untouched, no new header).
-    file_exists = os.path.exists(a.out) and os.path.getsize(a.out) > 0
-    with open(a.out, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore")
-        if not file_exists:
-            w.writeheader()
-        for r in all_rows:
-            w.writerow(r)
-    print(f"\n[tin-defense] appended {len(all_rows)} tinyimagenet rows -> {a.out}")
+    print(f"\n[tin-defense] finished. appended {n_new} new row(s); "
+          f"{len(completed)}/{total_targets} {a.transfer} rows now in {a.out}")
 
 
 if __name__ == "__main__":

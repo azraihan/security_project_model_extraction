@@ -1,0 +1,14 @@
+defense,transfer,queries,loss,substitute_accuracy,victim_accuracy,fidelity
+none (soft),tinyimagenet,5000,soft,0.3234,,0.3231
+none (soft),tinyimagenet,10000,soft,0.3417,,0.3418
+none (soft),tinyimagenet,20000,soft,0.5083,,0.5133
+none (soft),tinyimagenet,50000,soft,0.7469,,0.7599
+round-1 (soft),tinyimagenet,5000,soft,0.3266,,0.3277
+round-1 (soft),tinyimagenet,10000,soft,0.3816,,0.3835
+round-1 (soft),tinyimagenet,20000,soft,0.5752,,0.5821
+round-1 (soft),tinyimagenet,50000,soft,0.7224,,0.7332
+noise (soft),tinyimagenet,5000,soft,0.1956,,0.1960
+noise (soft),tinyimagenet,10000,soft,0.3331,,0.3314
+noise (soft),tinyimagenet,20000,soft,0.1526,,0.1512
+noise (soft),tinyimagenet,50000,soft,0.6731,,0.6837
+top-1 prob (soft),tinyimagenet,5000,soft,0.2257,,0.2255
