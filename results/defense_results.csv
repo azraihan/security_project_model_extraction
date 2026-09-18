@@ -1,0 +1,21 @@
+defense,transfer,queries,loss,substitute_accuracy,victim_accuracy,fidelity
+none (soft),cifar100,5000,soft,0.2356,0.9433,0.2336
+none (soft),cifar100,10000,soft,0.3082,0.9433,0.3072
+none (soft),cifar100,20000,soft,0.5042,0.9433,0.5109
+none (soft),cifar100,50000,soft,0.7499,0.9433,0.7641
+round-1 (soft),cifar100,5000,soft,0.2633,0.9433,0.2609
+round-1 (soft),cifar100,10000,soft,0.2919,0.9433,0.292
+round-1 (soft),cifar100,20000,soft,0.4982,0.9433,0.5043
+round-1 (soft),cifar100,50000,soft,0.7462,0.9433,0.76
+noise (soft),cifar100,5000,soft,0.1444,0.9433,0.1421
+noise (soft),cifar100,10000,soft,0.2162,0.9433,0.2137
+noise (soft),cifar100,20000,soft,0.4334,0.9433,0.4383
+noise (soft),cifar100,50000,soft,0.5166,0.9433,0.5244
+top-1 prob (soft),cifar100,5000,soft,0.2596,0.9433,0.2587
+top-1 prob (soft),cifar100,10000,soft,0.3157,0.9433,0.3155
+top-1 prob (soft),cifar100,20000,soft,0.4657,0.9433,0.4704
+top-1 prob (soft),cifar100,50000,soft,0.7508,0.9433,0.7632
+label_only (hard),cifar100,5000,hard,0.1799,0.9433,0.1787
+label_only (hard),cifar100,10000,hard,0.308,0.9433,0.3087
+label_only (hard),cifar100,20000,hard,0.457,0.9433,0.4594
+label_only (hard),cifar100,50000,hard,0.7117,0.9433,0.7244
