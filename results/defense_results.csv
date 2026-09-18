@@ -19,3 +19,23 @@ label_only (hard),cifar100,5000,hard,0.1799,0.9433,0.1787
 label_only (hard),cifar100,10000,hard,0.308,0.9433,0.3087
 label_only (hard),cifar100,20000,hard,0.457,0.9433,0.4594
 label_only (hard),cifar100,50000,hard,0.7117,0.9433,0.7244
+none (soft),tinyimagenet,5000,soft,0.3234,0.9433,0.3231
+none (soft),tinyimagenet,10000,soft,0.3417,0.9433,0.3418
+none (soft),tinyimagenet,20000,soft,0.5083,0.9433,0.5133
+none (soft),tinyimagenet,50000,soft,0.7469,0.9433,0.7599
+round-1 (soft),tinyimagenet,5000,soft,0.3266,0.9433,0.3277
+round-1 (soft),tinyimagenet,10000,soft,0.3816,0.9433,0.3835
+round-1 (soft),tinyimagenet,20000,soft,0.5752,0.9433,0.5821
+round-1 (soft),tinyimagenet,50000,soft,0.7224,0.9433,0.7332
+noise (soft),tinyimagenet,5000,soft,0.1956,0.9433,0.196
+noise (soft),tinyimagenet,10000,soft,0.3331,0.9433,0.3314
+noise (soft),tinyimagenet,20000,soft,0.1526,0.9433,0.1512
+noise (soft),tinyimagenet,50000,soft,0.6731,0.9433,0.6837
+top-1 prob (soft),tinyimagenet,5000,soft,0.2257,0.9433,0.2255
+top-1 prob (soft),tinyimagenet,10000,soft,0.1566,0.9433,0.155
+top-1 prob (soft),tinyimagenet,20000,soft,0.5616,0.9433,0.5685
+top-1 prob (soft),tinyimagenet,50000,soft,0.7334,0.9433,0.7441
+label_only (hard),tinyimagenet,5000,hard,0.3005,0.9433,0.2995
+label_only (hard),tinyimagenet,10000,hard,0.3291,0.9433,0.3298
+label_only (hard),tinyimagenet,20000,hard,0.4984,0.9433,0.5047
+label_only (hard),tinyimagenet,50000,hard,0.6886,0.9433,0.7002
