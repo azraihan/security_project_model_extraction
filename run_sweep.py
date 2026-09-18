@@ -271,7 +271,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--experiment", choices=("main", "defense"), default="main")
     p.add_argument("--victim", default=VICTIM_CKPT)
-    p.add_argument("--transfer", default=None, choices=(None, "cifar10", "cifar100"))
+    p.add_argument("--transfer", default=None,
+                   choices=(None, "cifar10", "cifar100", "tinyimagenet"))
     p.add_argument("--budgets", type=int, nargs="+", default=[5000, 10000, 20000, 50000])
     p.add_argument("--sub-arch", default="smallcnn")
     p.add_argument("--sub-epochs", type=int, default=40)

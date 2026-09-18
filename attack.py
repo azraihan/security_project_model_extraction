@@ -135,7 +135,8 @@ def load_cache(path):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--server-url", default="http://127.0.0.1:8000")
-    p.add_argument("--transfer", default="cifar100", choices=("cifar10", "cifar100"))
+    p.add_argument("--transfer", default="cifar100",
+                   choices=("cifar10", "cifar100", "tinyimagenet"))
     p.add_argument("--budget", type=int, default=20000)
     p.add_argument("--batch-size", type=int, default=256)
     p.add_argument("--seed", type=int, default=0)

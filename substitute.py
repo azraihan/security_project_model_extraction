@@ -42,7 +42,7 @@ def soft_ce(student_logits: torch.Tensor, victim_probs: torch.Tensor) -> torch.T
 
 def train_substitute(images, labels, probs=None, arch="smallcnn", loss="soft",
                      epochs=40, batch_size=256, lr=0.1, weight_decay=5e-4,
-                     device=None, verbose=True):
+                     device=None, verbose=True, num_workers=4):
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
     use_soft = (loss == "soft")
@@ -51,7 +51,8 @@ def train_substitute(images, labels, probs=None, arch="smallcnn", loss="soft",
                          "(victim likely ran with the label_only defense)")
 
     loader = substitute_loader(images, labels, probs if use_soft else None,
-                               batch_size=batch_size, train=True)
+                               batch_size=batch_size, train=True,
+                               num_workers=num_workers)
     model = build_model(arch, NUM_CLASSES).to(device)
     opt = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9,
                           weight_decay=weight_decay, nesterov=True)
