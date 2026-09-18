@@ -21,10 +21,14 @@ Design choice worth stating explicitly:
 
 from __future__ import annotations
 
+import os
+import urllib.request
+import zipfile
 from typing import Tuple
 
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 import torchvision
@@ -98,6 +102,53 @@ def cifar10_eval_arrays(download: bool = True) -> Tuple[np.ndarray, np.ndarray]:
 # --------------------------------------------------------------------------- #
 # Transfer pools (what the attacker queries with)                             #
 # --------------------------------------------------------------------------- #
+TINYIMAGENET_URL = "http://cs231n.stanford.edu/tiny-imagenet-200.zip"
+
+
+def _tinyimagenet_pool(download: bool = True) -> np.ndarray:
+    """
+    Tiny ImageNet train split as an out-of-distribution query pool.
+
+    Tiny ImageNet ships 100k 64x64 RGB images across 200 classes whose label
+    space does not overlap CIFAR-10. We downscale every image to 32x32 (bilinear)
+    so it matches the CIFAR wire format the victim server expects, convert any
+    grayscale image to RGB, and cache the resulting (N,32,32,3) uint8 array.
+    """
+    cache = os.path.join(DATA_ROOT, "tinyimagenet_train_32.npy")
+    if os.path.exists(cache):
+        return np.load(cache)
+
+    extract_dir = os.path.join(DATA_ROOT, "tiny-imagenet-200")
+    if not os.path.isdir(extract_dir):
+        os.makedirs(DATA_ROOT, exist_ok=True)
+        zip_path = os.path.join(DATA_ROOT, "tiny-imagenet-200.zip")
+        if not os.path.exists(zip_path):
+            if not download:
+                raise RuntimeError("tiny-imagenet-200 not present and download=False")
+            print(f"[data] downloading Tiny ImageNet from {TINYIMAGENET_URL} ...")
+            urllib.request.urlretrieve(TINYIMAGENET_URL, zip_path)
+        print("[data] extracting Tiny ImageNet ...")
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(DATA_ROOT)
+
+    train_dir = os.path.join(extract_dir, "train")
+    imgs = []
+    for wnid in sorted(os.listdir(train_dir)):
+        img_dir = os.path.join(train_dir, wnid, "images")
+        if not os.path.isdir(img_dir):
+            continue
+        for fn in sorted(os.listdir(img_dir)):
+            if not fn.lower().endswith((".jpeg", ".jpg", ".png")):
+                continue
+            with Image.open(os.path.join(img_dir, fn)) as im:
+                im = im.convert("RGB").resize((IMG_SIZE, IMG_SIZE), Image.BILINEAR)
+                imgs.append(np.asarray(im, dtype=np.uint8))
+    arr = np.stack(imgs, 0)                                  # (100000,32,32,3)
+    np.save(cache, arr)
+    print(f"[data] cached {len(arr)} Tiny ImageNet images -> {cache}")
+    return arr
+
+
 def transfer_pool(name: str, download: bool = True) -> np.ndarray:
     """Return the attacker's query pool as (N,32,32,3) uint8."""
     name = name.lower()
@@ -107,7 +158,10 @@ def transfer_pool(name: str, download: bool = True) -> np.ndarray:
     if name == "cifar100":
         ds = torchvision.datasets.CIFAR100(DATA_ROOT, train=True, download=download)
         return ds.data.astype(np.uint8)                     # 50k OOD
-    raise ValueError(f"unknown transfer pool '{name}' (use cifar10 | cifar100)")
+    if name == "tinyimagenet":
+        return _tinyimagenet_pool(download=download)        # 100k OOD (64->32)
+    raise ValueError(
+        f"unknown transfer pool '{name}' (use cifar10 | cifar100 | tinyimagenet)")
 
 
 # --------------------------------------------------------------------------- #
@@ -146,7 +200,8 @@ def substitute_loader(images, labels, probs=None, batch_size=256,
                       num_workers=4, train=True) -> DataLoader:
     ds = TransferDataset(images, labels, probs, train=train)
     return DataLoader(ds, batch_size, shuffle=train, num_workers=num_workers,
-                      pin_memory=True, drop_last=False)
+                      pin_memory=True, drop_last=False,
+                      persistent_workers=(num_workers > 0))
 
 
 # --------------------------------------------------------------------------- #
